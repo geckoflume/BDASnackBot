@@ -1,5 +1,4 @@
 import telebot
-import os
 import psycopg2
 
 conn = psycopg2.connect("dbname=snacks user=bot password=password")
@@ -12,16 +11,16 @@ def full_username(user):
     return ' '.join(filter(None, [user.first_name, user.last_name]))
 
 
-def get_balance(user):
-    cur.execute("SELECT * FROM debts WHERE userid=%s;", [user.id])
+def get_balance(userid):
+    cur.execute("SELECT * FROM debts WHERE userid=%s;", [userid])
     ret = 0
     if cur.rowcount > 0:
         ret = cur.fetchone()[1]
     return ret
 
 
-def get_balance_str(user):
-    return str(get_balance(user)) + " snacks/bières"
+def get_balance_str(userid):
+    return str(get_balance(userid)) + " snacks/bières"
 
 
 def plus(message):
@@ -32,8 +31,7 @@ def plus(message):
     bot.reply_to(
         message, "Ajouté 1 snack/bière à votre dette, " +
         full_username(message.from_user) + " !\nDette actuelle : " +
-        get_balance_str(message.from_user))
-    # print("+1 pour", message.from_user.id)
+        get_balance_str(message.from_user.id))
 
 
 def moins(message):
@@ -44,8 +42,7 @@ def moins(message):
     bot.reply_to(
         message, "Enlevé 1 snack/bière de votre dette, " +
         full_username(message.from_user) + " !\nDette actuelle : " +
-        get_balance_str(message.from_user))
-    # print("-1 pour", message.from_user.id)
+        get_balance_str(message.from_user.id))
 
 
 @bot.message_handler(commands=['start', 'help'])
@@ -55,10 +52,26 @@ def send_welcome(message):
                  parse_mode="Markdown")
 
 
-@bot.message_handler(commands=['balance', 'dette', 'total'])
+@bot.message_handler(commands=['balance'])
 def send_balance(message):
-    bot.send_message(message.chat.id,
-                     "Votre balance : " + get_balance_str(message.from_user))
+    bot.send_message(
+        message.chat.id,
+        "Votre balance : " + get_balance_str(message.from_user.id))
+
+
+@bot.message_handler(commands=['balance_bda'])
+def send_balance_bda(message):
+    cur.execute("SELECT * FROM debts ORDER BY balance DESC;")
+    res = "*Dettes de " + str(cur.rowcount) + " membre"
+    if cur.rowcount > 1:
+        res += "s"
+    res += "*\n"
+    for row in cur.fetchall():
+        u = bot.get_chat_member(message.chat.id, row[0]).user
+        res += "Balance de " + full_username(
+            u) + " (@" + u.username + ") : " + str(
+                row[1]) + " snacks/bières" + "\n"
+    bot.send_message(message.chat.id, res, parse_mode="Markdown")
 
 
 @bot.message_handler(commands=['plus'])
@@ -71,12 +84,14 @@ def less(message):
     moins(message)
 
 
-@bot.message_handler(func=lambda message: True)
+@bot.message_handler(func=lambda message: "+1" in message.text)
 def echo_all(message):
-    if "+1" in message.text:
-        plus(message)
-    elif "-1" in message.text:
-        moins(message)
+    plus(message)
+
+
+@bot.message_handler(func=lambda message: "-1" in message.text)
+def echo_all(message):
+    moins(message)
 
 
 bot.polling()
