@@ -1,10 +1,13 @@
 import telebot
 import psycopg2
+from flask import Flask, request
+import os
 
-conn = psycopg2.connect("dbname=snacks user=bot password=password")
+conn = psycopg2.connect("CREDITENTIALS")
 cur = conn.cursor()
-
-bot = telebot.TeleBot("API_KEY")
+TOKEN = 'API_TOKEN'
+bot = telebot.TeleBot(TOKEN)
+server = Flask(__name__)
 
 
 def full_username(user):
@@ -94,4 +97,21 @@ def echo_all(message):
     moins(message)
 
 
-bot.polling()
+@server.route('/' + TOKEN, methods=['POST'])
+def getMessage():
+    bot.process_new_updates(
+        [telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+    return "!", 200
+
+
+@server.route("/")
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url='URL' + TOKEN)
+    return "!", 200
+
+
+if __name__ == "__main__":
+    server.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+
+print("Bot started successfully!")
