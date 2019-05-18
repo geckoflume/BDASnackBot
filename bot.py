@@ -1,12 +1,16 @@
+import os
 import telebot
 import psycopg2
 from flask import Flask, request
-import os
 
-conn = psycopg2.connect("CREDITENTIALS")
+DATABASE_URL = os.environ['DATABASE_URL']
+API_TOKEN = os.environ['API_TOKEN']
+URL = os.environ['URL']
+PRICE_UNIT = 0.5
+
+conn = psycopg2.connect(DATABASE_URL, sslmode='require')
 cur = conn.cursor()
-TOKEN = 'API_TOKEN'
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(API_TOKEN)
 server = Flask(__name__)
 
 
@@ -23,7 +27,7 @@ def get_balance(userid):
 
 
 def get_balance_str(userid):
-    return str(get_balance(userid)) + " snacks/bières"
+    return str(get_balance(userid)) + " 🍫"
 
 
 def plus(message):
@@ -31,10 +35,11 @@ def plus(message):
         "INSERT INTO debts (userid, balance) VALUES (%s, 1) ON CONFLICT (userid) DO UPDATE SET balance = debts.balance + 1;",
         [message.from_user.id])
     conn.commit()
-    bot.reply_to(
-        message, "Ajouté 1 snack/bière à votre dette, " +
-        full_username(message.from_user) + " !\nDette actuelle : " +
-        get_balance_str(message.from_user.id))
+    bot.reply_to(message,
+                 "Ajouté 1 🍫 à votre dette, " +
+                 full_username(message.from_user) + " !\n*Dette actuelle :* " +
+                 get_balance_str(message.from_user.id),
+                 parse_mode='Markdown')
 
 
 def moins(message):
@@ -42,73 +47,75 @@ def moins(message):
         "INSERT INTO debts (userid, balance) VALUES (%s, 1) ON CONFLICT (userid) DO UPDATE SET balance = debts.balance - 1;",
         [message.from_user.id])
     conn.commit()
-    bot.reply_to(
-        message, "Enlevé 1 snack/bière de votre dette, " +
-        full_username(message.from_user) + " !\nDette actuelle : " +
-        get_balance_str(message.from_user.id))
+    bot.reply_to(message,
+                 "Enlevé 1 🍫 de votre dette, " +
+                 full_username(message.from_user) + " !\n*Dette actuelle :* " +
+                 get_balance_str(message.from_user.id),
+                 parse_mode='Markdown')
+
+
+def total():
+    cur.execute("SELECT SUM (balance) FROM debts;")
+    ret = 0
+    if cur.rowcount > 0:
+        ret = int(cur.fetchone()[0])
+    return ret
 
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     bot.reply_to(message,
                  "💜 *Visionneirb - BDA ENSEIRB-MATMECA 2019/2020* 💜",
-                 parse_mode="Markdown")
+                 parse_mode='Markdown')
 
 
 @bot.message_handler(commands=['balance'])
 def send_balance(message):
-    bot.send_message(
-        message.chat.id,
-        "Votre balance : " + get_balance_str(message.from_user.id))
+    bot.send_message(message.chat.id,
+                     "Votre dette : " + get_balance_str(message.from_user.id))
 
 
 @bot.message_handler(commands=['balance_bda'])
 def send_balance_bda(message):
+    sum = total()
     cur.execute("SELECT * FROM debts ORDER BY balance DESC;")
+    i = 0
+
     res = "*Dettes de " + str(cur.rowcount) + " membre"
     if cur.rowcount > 1:
         res += "s"
-    res += "*\n"
+    res += "* (total : " + str(sum) + "x" + "{:.2f}".format(
+        PRICE_UNIT) + "=" + "{:.2f}".format(sum * PRICE_UNIT) + "€) :\n"
     for row in cur.fetchall():
+        i += 1
         u = bot.get_chat_member(message.chat.id, row[0]).user
-        res += "Balance de " + full_username(
-            u) + " (@" + u.username + ") : " + str(
-                row[1]) + " snacks/bières" + "\n"
-    bot.send_message(message.chat.id, res, parse_mode="Markdown")
+        res += str(i) + " - " + full_username(u)
+        if u.username is not None:
+            res += " (@" + u.username + ")"
+        res += " : " + str(row[1]) + " 🍫" + "\n"
+    bot.send_message(message.chat.id, res, parse_mode='Markdown')
 
 
-@bot.message_handler(commands=['plus'])
-def more(message):
-    plus(message)
-
-
-@bot.message_handler(commands=['moins'])
-def less(message):
-    moins(message)
-
-
-@bot.message_handler(func=lambda message: "+1" in message.text)
+@bot.message_handler(func=lambda message: True)
 def echo_all(message):
-    plus(message)
+    if "+1" in message.text:
+        plus(message)
+    elif "-1" in message.text:
+        moins(message)
 
 
-@bot.message_handler(func=lambda message: "-1" in message.text)
-def echo_all(message):
-    moins(message)
-
-
-@server.route('/' + TOKEN, methods=['POST'])
+@server.route('/' + API_TOKEN, methods=['POST'])
 def getMessage():
     bot.process_new_updates(
         [telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
-    return "!", 200
+    return "VZ <3", 200
 
 
 @server.route("/")
 def webhook():
     bot.remove_webhook()
-    bot.set_webhook(url='URL' + TOKEN)
-    return "!", 200
+    bot.set_webhook(url=URL + API_TOKEN)
+    return "VZ <3", 200
 
 
 if __name__ == "__main__":
