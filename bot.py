@@ -71,8 +71,9 @@ def send_welcome(message):
 
 @bot.message_handler(commands=['balance'])
 def send_balance(message):
-    bot.send_message(message.chat.id,
-                     "Votre dette : " + get_balance_str(message.from_user.id))
+    bot.reply_to(message,
+                 "Votre dette : " + get_balance_str(message.from_user.id),
+                 parse_mode='Markdown')
 
 
 @bot.message_handler(commands=['balance_bda'])
@@ -91,7 +92,7 @@ def send_balance_bda(message):
         u = bot.get_chat_member(message.chat.id, row[0]).user
         res += str(i) + " - " + full_username(u)
         if u.username is not None:
-            res += " (@" + u.username + ")"
+            res += " (" + u.username + ")"
         res += " : " + str(row[1]) + " 🍫" + "\n"
     bot.send_message(message.chat.id, res, parse_mode='Markdown')
 
