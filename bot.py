@@ -30,6 +30,7 @@ def get_balance_str(userid):
     return str(get_balance(userid)) + " 🍫"
 
 
+@bot.message_handler(commands=['plus'])
 def plus(message):
     cur.execute(
         "INSERT INTO debts (userid, balance) VALUES (%s, 1) ON CONFLICT (userid) DO UPDATE SET balance = debts.balance + 1;",
@@ -42,13 +43,27 @@ def plus(message):
                  parse_mode='Markdown')
 
 
+@bot.message_handler(commands=['moins'])
 def moins(message):
     cur.execute(
-        "INSERT INTO debts (userid, balance) VALUES (%s, 1) ON CONFLICT (userid) DO UPDATE SET balance = debts.balance - 1;",
+        "INSERT INTO debts (userid, balance) VALUES (%s, 0) ON CONFLICT (userid) DO UPDATE SET balance = debts.balance - 1;",
         [message.from_user.id])
     conn.commit()
     bot.reply_to(message,
                  "Enlevé 1 🍫 de votre dette, " +
+                 full_username(message.from_user) + " !\n*Dette actuelle :* " +
+                 get_balance_str(message.from_user.id),
+                 parse_mode='Markdown')
+
+
+@bot.message_handler(commands=['reset'])
+def reset(message):
+    cur.execute(
+        "INSERT INTO debts (userid, balance) VALUES (%s, 0) ON CONFLICT (userid) DO UPDATE SET balance = 0;",
+        [message.from_user.id])
+    conn.commit()
+    bot.reply_to(message,
+                 "Remis à 0 🍫 votre dette, " +
                  full_username(message.from_user) + " !\n*Dette actuelle :* " +
                  get_balance_str(message.from_user.id),
                  parse_mode='Markdown')
@@ -82,19 +97,20 @@ def send_balance_bda(message):
     cur.execute("SELECT * FROM debts ORDER BY balance DESC;")
     i = 0
 
-    res = "*Dettes de " + str(cur.rowcount) + " membre"
+    res = "<b>Dettes de " + str(cur.rowcount) + " membre"
     if cur.rowcount > 1:
         res += "s"
-    res += "* (total : " + str(sum) + "x" + "{:.2f}".format(
+    res += "</b> (total : " + str(sum) + "x" + "{:.2f}".format(
         PRICE_UNIT) + "=" + "{:.2f}".format(sum * PRICE_UNIT) + "€) :\n"
     for row in cur.fetchall():
-        i += 1
-        u = bot.get_chat_member(message.chat.id, row[0]).user
-        res += str(i) + " - " + full_username(u)
-        if u.username is not None:
-            res += " (" + u.username + ")"
-        res += " : " + str(row[1]) + " 🍫" + "\n"
-    bot.send_message(message.chat.id, res, parse_mode='Markdown')
+        if row[1] > 0:
+            i += 1
+            u = bot.get_chat_member(message.chat.id, row[0]).user
+            res += str(i) + " - " + full_username(u)
+            if u.username is not None:
+                res += " (" + u.username + ")"
+            res += " : " + str(row[1]) + " 🍫" + "\n"
+    bot.send_message(message.chat.id, res, parse_mode='HTML')
 
 
 @bot.message_handler(func=lambda message: True)
